@@ -1,0 +1,41 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Credentials & secrets
+credentials.json
+wifi_config.json
+*.key
+*.pem
+
+# Logs & runtime data
+logs/
+*.log
+
+# Generated reports
+*_report.json
+
+# VS Code
+.vscode/
+.cache/
+
+# Thesis (separate repo)
+thesis/
+thesis_new/
+thesis_new_backup_*/
+
+# Temp files
+_tmp_*/
+*.zip
+*.docx
+build_log*.txt
+_du_thao.txt
+_qd713.txt
+
+# Office
+*.pptx
+~$*
+
+# MicroPython compiled
+*.mpy
