@@ -6,7 +6,7 @@ Hệ thống nông nghiệp thông minh dựa trên **ESP32-S3** với điều k
 
 ```
 ai_optimizer/esp32_firmware/   ← Firmware MicroPython chạy trên ESP32-S3
-ai_mother/                     ← Server Python: phân tích dữ liệu & tối ưu profile
+ai_mother/                     ← Server Python: phân tích dữ liệu & tối ưu profile (private)
 generate_*.py                  ← Script vẽ biểu đồ phân tích
 plant_profiles.json            ← Cấu hình môi trường theo loại cây
 schedule.json                  ← Lịch điều khiển
