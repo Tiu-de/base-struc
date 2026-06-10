@@ -20,28 +20,49 @@ class WiFiController:
             'ip': None,
             'ssid': None
         }
+        self.last_scan_results = []
+        self.last_scan_ts = 0
 
     def _scan_networks(self):
         """Scan nearby Wi-Fi APs and return unique SSIDs sorted by signal strength."""
         results = {}
-        try:
-            self.sta.active(True)
-            for item in self.sta.scan():
-                try:
-                    ssid_raw = item[0]
-                    rssi = item[3]
-                    ssid = ssid_raw.decode().strip()
-                    if not ssid:
-                        continue
-                    if ssid not in results or rssi > results[ssid]["rssi"]:
-                        results[ssid] = {"ssid": ssid, "rssi": rssi}
-                except Exception:
-                    continue
-        except Exception as e:
-            print("Wi-Fi scan warn:", e)
+        saw_error = None
 
-        ordered = sorted(results.values(), key=lambda x: x["rssi"], reverse=True)
-        return ordered
+        for _ in range(3):
+            try:
+                self.sta.active(True)
+                try:
+                    self.sta.disconnect()
+                except Exception:
+                    pass
+
+                time.sleep(0.2)
+                for item in self.sta.scan():
+                    try:
+                        ssid_raw = item[0]
+                        rssi = item[3]
+                        ssid = ssid_raw.decode("utf-8", "ignore").strip()
+                        if not ssid:
+                            continue
+                        if ssid not in results or rssi > results[ssid]["rssi"]:
+                            results[ssid] = {"ssid": ssid, "rssi": rssi}
+                    except Exception:
+                        continue
+
+                if results:
+                    ordered = sorted(results.values(), key=lambda x: x["rssi"], reverse=True)
+                    self.last_scan_results = ordered
+                    self.last_scan_ts = time.time()
+                    return ordered
+            except Exception as e:
+                saw_error = e
+                time.sleep(0.2)
+
+        if saw_error is not None:
+            print("Wi-Fi scan warn:", saw_error)
+
+        # fallback: giữ danh sách quét thành công gần nhất để UI không luôn rỗng
+        return self.last_scan_results
 
     def _html_escape(self, text):
         s = "" if text is None else str(text)
@@ -321,6 +342,8 @@ class WiFiController:
 
                 if method == "GET" and path.startswith("/scan"):
                     try:
+                        cached_ssids = self._scan_networks()
+                        next_scan_at = time.time() + 8
                         payload = ujson.dumps({"networks": cached_ssids})
                         cl.send("HTTP/1.0 200 OK\r\nContent-type: application/json\r\nCache-Control: no-store\r\n\r\n")
                         cl.send(payload)
