@@ -73,27 +73,46 @@ class WiFiController:
         s = s.replace("'", "&#39;")
         return s
 
-    def _url_decode(self, value):
-        """Decode x-www-form-urlencoded text."""
+    def _percent_decode(self, value, plus_as_space=False):
+        """Decode percent-encoded text as UTF-8.
+
+        plus_as_space=True is used for application/x-www-form-urlencoded payloads.
+        """
         if value is None:
             return ""
-        s = value.replace('+', ' ')
-        out = []
+
+        s = str(value)
+        out = bytearray()
         i = 0
         n = len(s)
         while i < n:
             ch = s[i]
+            if plus_as_space and ch == '+':
+                out.append(32)
+                i += 1
+                continue
             if ch == '%' and i + 2 < n:
                 hex_text = s[i + 1:i + 3]
                 try:
-                    out.append(chr(int(hex_text, 16)))
+                    out.append(int(hex_text, 16))
                     i += 3
                     continue
                 except Exception:
                     pass
-            out.append(ch)
+            try:
+                out.extend(ch.encode("utf-8"))
+            except Exception:
+                pass
             i += 1
-        return ''.join(out)
+
+        try:
+            return bytes(out).decode("utf-8", "ignore")
+        except Exception:
+            return str(value)
+
+    def _url_decode(self, value):
+        """Decode x-www-form-urlencoded text."""
+        return self._percent_decode(value, plus_as_space=True)
 
     def _parse_form(self, body):
         data = {}
@@ -258,9 +277,22 @@ class WiFiController:
                 self.last_status = {'connected': False, 'ip': None, 'ssid': None}
                 return self.last_status
 
-            print(f"🔌 Đang thử kết nối Wi-Fi: {config['ssid']}")
+            ssid = config.get("ssid", "")
+            password = config.get("password", "")
+
+            # Backward compatibility: auto-decode legacy percent-encoded values.
+            if isinstance(ssid, str) and ('%' in ssid):
+                ssid_dec = self._percent_decode(ssid, plus_as_space=False)
+                if ssid_dec:
+                    ssid = ssid_dec
+            if isinstance(password, str) and ('%' in password):
+                pass_dec = self._percent_decode(password, plus_as_space=False)
+                if pass_dec or password == "%":
+                    password = pass_dec
+
+            print(f"🔌 Đang thử kết nối Wi-Fi: {ssid}")
             self.sta.active(True)
-            self.sta.connect(config["ssid"], config["password"])
+            self.sta.connect(ssid, password)
 
             for _ in range(timeout):
                 if self.sta.isconnected():
@@ -268,15 +300,21 @@ class WiFiController:
                     self.last_status = {
                         'connected': True,
                         'ip': ip,
-                        'ssid': config["ssid"]
+                        'ssid': ssid
                     }
                     print(f"✅ Kết nối thành công! IP: {ip}")
+                    # Heal old encoded config on successful connection.
+                    try:
+                        if ssid != config.get("ssid") or password != config.get("password"):
+                            self.save_config(ssid, password)
+                    except Exception:
+                        pass
                     return self.last_status
                 time.sleep(1)
 
             print("❌ Không kết nối được")
             self.sta.active(False)
-            self.last_status = {'connected': False, 'ip': None, 'ssid': config["ssid"]}
+            self.last_status = {'connected': False, 'ip': None, 'ssid': ssid}
             return self.last_status
         except Exception as e:
             print(f"Lỗi khi kết nối Wi-Fi: {e}")
@@ -345,11 +383,11 @@ class WiFiController:
                         cached_ssids = self._scan_networks()
                         next_scan_at = time.time() + 8
                         payload = ujson.dumps({"networks": cached_ssids})
-                        cl.send("HTTP/1.0 200 OK\r\nContent-type: application/json\r\nCache-Control: no-store\r\n\r\n")
+                        cl.send("HTTP/1.0 200 OK\r\nContent-type: application/json; charset=utf-8\r\nCache-Control: no-store\r\n\r\n")
                         cl.send(payload)
                     except Exception as e:
                         print("Loi scan endpoint:", e)
-                        cl.send("HTTP/1.0 500 Internal Server Error\r\nContent-type: text/plain\r\n\r\nscan error")
+                        cl.send("HTTP/1.0 500 Internal Server Error\r\nContent-type: text/plain; charset=utf-8\r\n\r\nscan error")
                     cl.close()
                     continue
 
@@ -372,20 +410,30 @@ class WiFiController:
                             ok, ip = self._connect_with_credentials(ssid, password, timeout=15)
                             if ok:
                                 self.save_config(ssid, password)
-                                self.ap.active(False)
                                 last_message = "Ket noi thanh cong. AP mode da tat."
                                 response = "<h3>Ket noi thanh cong!</h3><p>SSID: {}</p><p>IP: {}</p><p>Ban co the dong trang nay.</p>".format(ssid, ip)
-                                cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n")
-                                cl.send(response)
-                                cl.close()
-                                s.close()
+                                try:
+                                    # Send success page first; some clients close immediately after submit.
+                                    cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html; charset=utf-8\r\n\r\n")
+                                    cl.send(response)
+                                except Exception as send_err:
+                                    print("Portal success response warn:", send_err)
+                                try:
+                                    cl.close()
+                                except Exception:
+                                    pass
+                                try:
+                                    s.close()
+                                except Exception:
+                                    pass
+                                self.ap.active(False)
                                 print("Wi-Fi OK, da thoat AP mode")
                                 return True
 
                             last_message = "Ket noi that bai. Kiem tra mat khau roi thu lai."
                             response = self._build_html(cached_ssids, message=last_message, selected_ssid=last_selected)
 
-                        cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n")
+                        cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html; charset=utf-8\r\n\r\n")
                         cl.send(response)
                         cl.close()
                     except Exception as e:
@@ -393,7 +441,7 @@ class WiFiController:
                         cl.close()
                 else:
                     response = self._build_html(cached_ssids, message=last_message, selected_ssid=last_selected)
-                    cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n")
+                    cl.send("HTTP/1.0 200 OK\r\nContent-type: text/html; charset=utf-8\r\n\r\n")
                     cl.send(response)
                     cl.close()
 
