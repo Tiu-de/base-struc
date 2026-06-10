@@ -4,7 +4,7 @@
 # ========== Wi-Fi ==========
 WIFI_CONFIG_FILE = "wifi_config.json"  # file lưu ssid/pass sau khi config qua AP
 AP_SSID = "ESP32_Config"  # tên AP khi vào chế độ config
-CONFIG_PORTAL_TIMEOUT_SEC = 300  # thời gian chờ config AP trước khi bỏ qua (giây)
+CONFIG_PORTAL_TIMEOUT_SEC = 180  # thời gian chờ config AP trước khi bỏ qua (giây)
 
 # ========== MQTT (CoreIoT broker) ==========
 MQTT = {
