@@ -299,7 +299,7 @@ mpremote connect COM3 fs cp main.py :main.py
 ```python
 from machine import Pin, SoftI2C
 i2c = SoftI2C(scl=Pin(12), sda=Pin(11))
-print(i2c.scan())  # nên thấy [33] (0x21) tại cái màn mượn thầy nó như thế (bt là 0x27)
+print(i2c.scan())  # nên thấy ví dụ [33] (0x21) tại các màn khác mặc định là 27, màn của tôi có địa chỉ khác
 ```
 - Nếu địa chỉ khác, sửa `config.LCD.I2C_ADDR`
 
