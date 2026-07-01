@@ -1,0 +1,1 @@
+Branch for ESP32 firmware upload with sensitive data masked.
